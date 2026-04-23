@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# SmartLogix AI – Real-Time Logistics Intelligence Platform
+
+A modern, professional web application UI for logistics intelligence, built with Next.js and JavaScript.
+
+## Features
+
+- **Landing Page**: Hero section with animated background and call-to-action buttons
+- **Login/Role Selection**: Simple authentication with buyer and shipper roles
+- **Buyer Dashboard**: Live shipment tracking, AI predictions, insights, and analytics
+- **Shipper Dashboard**: Shipment management, route selection, anomaly detection, and operational insights
+
+## Tech Stack
+
+- **Framework**: Next.js 16 (App Router)
+- **Styling**: Tailwind CSS
+- **Charts**: Recharts
+- **Icons**: Heroicons
+- **Animations**: CSS animations and transitions
 
 ## Getting Started
 
-First, run the development server:
-
+1. Install dependencies:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Run the development server:
+```bash
+npm run dev
+```
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+3. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Project Structure
 
-## Learn More
+```
+src/
+├── app/
+│   ├── page.js              # Landing page
+│   ├── login/
+│   │   └── page.js          # Login/Role selection
+│   ├── buyer/
+│   │   └── page.js          # Buyer dashboard
+│   └── shipper/
+│       └── page.js          # Shipper dashboard
+├── globals.css              # Global styles
+└── layout.js                # Root layout
+```
 
-To learn more about Next.js, take a look at the following resources:
+## UI Design
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Clean, futuristic design with light theme
+- Blue/teal accent colors and subtle gradients
+- Responsive design optimized for desktop
+- Interactive elements with hover effects and animations
+- Data-driven dashboard with charts and widgets
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Mock Features
 
-## Deploy on Vercel
+- Simulated real-time shipment tracking
+- AI prediction panels with confidence scores
+- Anomaly detection alerts
+- Historical analytics with trend charts
+- Route optimization suggestions
+- Internal update system for shippers
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Navigation Flow
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Landing Page → Login Page
+2. Login → Buyer Dashboard or Shipper Dashboard
+3. Dashboards include logout links back to landing page
