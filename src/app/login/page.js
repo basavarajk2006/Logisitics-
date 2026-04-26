@@ -7,10 +7,17 @@ import { useState } from 'react';
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const router = useRouter();
+  const validEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   const handleLogin = (role) => {
-    // Mock login
+    if (!validEmailPattern.test(email.trim())) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
+    setError('');
     if (role === 'buyer') {
       router.push('/buyer');
     } else {
@@ -30,9 +37,13 @@ export default function Login() {
               type="email"
               id="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (error) setError('');
+              }}
               className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               placeholder="Enter your email"
+              required
             />
           </div>
           <div>
@@ -47,6 +58,7 @@ export default function Login() {
             />
           </div>
         </form>
+        {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
 
         <div className="mt-8 space-y-4">
           <button

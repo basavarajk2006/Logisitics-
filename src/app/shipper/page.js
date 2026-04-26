@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
+import MapLoader from '@/components/MapLoader';
 
 // Custom Icon Components
 const TruckIcon = ({ className }) => (
@@ -32,10 +33,28 @@ const ExclamationIcon = ({ className }) => (
 export default function ShipperDashboard() {
   const [selectedRoute, setSelectedRoute] = useState('sea');
   const [newUpdate, setNewUpdate] = useState('');
-  const [updates, setUpdates] = useState([
-    { message: 'Delay due to warehouse issue', time: '11:00 AM', type: 'delay' },
-    { message: 'Route change decision', time: '10:30 AM', type: 'route' }
-  ]);
+  const [shipments, setShipments] = useState([]);
+  const [selectedShipmentId, setSelectedShipmentId] = useState('');
+  const [updates, setUpdates] = useState([]);
+  const [anomalies, setAnomalies] = useState([]);
+  const [analytics, setAnalytics] = useState({
+    widgets: [
+      { title: 'Total Shipments', value: 0, change: null },
+      { title: 'Active Shipments', value: 0, change: null },
+      { title: 'Delayed Shipments', value: 0, change: null },
+      { title: 'Risk Distribution', chart: true, riskData: [] },
+    ],
+    riskData: [],
+  });
+  const [shipmentForm, setShipmentForm] = useState({
+    source: '',
+    destination: '',
+    cargoType: 'Electronics',
+    priority: 'Standard',
+  });
+  const [errorMessage, setErrorMessage] = useState('');
+  const [seedStatus, setSeedStatus] = useState('');
+  const [storyMode, setStoryMode] = useState('normal');
 
   const routes = {
     air: { icon: PlaneIcon, name: 'Air', time: '2 days', cost: '$5000', co2: 'High' },
@@ -45,18 +64,6 @@ export default function ShipperDashboard() {
     multi: { icon: TruckIcon, name: 'Multi-modal', time: '10 days', cost: '$3500', co2: 'Medium' }
   };
 
-  const anomalies = [
-    { message: 'Shipment idle for 6 hours', severity: 'high' },
-    { message: 'Route deviation detected', severity: 'medium' }
-  ];
-
-  const widgets = [
-    { title: 'Total Shipments', value: 1247, change: '+12%' },
-    { title: 'Active Shipments', value: 89, change: '+5%' },
-    { title: 'Delayed Shipments', value: 12, change: '-8%' },
-    { title: 'Risk Distribution', chart: true }
-  ];
-
   const costVsTime = [
     { mode: 'Air', cost: 5000, time: 2 },
     { mode: 'Sea', cost: 2000, time: 14 },
@@ -64,16 +71,143 @@ export default function ShipperDashboard() {
     { mode: 'Rail', cost: 2500, time: 7 }
   ];
 
-  const riskData = [
-    { name: 'Low', value: 60, color: '#10b981' },
-    { name: 'Medium', value: 30, color: '#f59e0b' },
-    { name: 'High', value: 10, color: '#ef4444' }
-  ];
+  const loadShipments = useCallback(async () => {
+    try {
+      const response = await fetch('/api/shipments');
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch shipments');
+      }
+      setShipments(data);
+      if (data.length > 0 && !selectedShipmentId) {
+        setSelectedShipmentId(data[0].id);
+      }
+    } catch (error) {
+      setErrorMessage(error.message);
+    }
+  }, [selectedShipmentId]);
 
-  const handleAddUpdate = () => {
+  const loadAnalytics = useCallback(async () => {
+    try {
+      const response = await fetch('/api/analytics');
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch analytics');
+      }
+      setAnalytics(data);
+    } catch (error) {
+      setErrorMessage(error.message);
+    }
+  }, []);
+
+  const loadShipmentDetails = useCallback(async (id) => {
+    if (!id) return;
+    try {
+      const [updatesResponse, anomaliesResponse] = await Promise.all([
+        fetch(`/api/shipments/${id}/updates`),
+        fetch(`/api/shipments/${id}/anomalies`),
+      ]);
+      const updatesData = await updatesResponse.json();
+      const anomaliesData = await anomaliesResponse.json();
+      if (!updatesResponse.ok) {
+        throw new Error(updatesData.error || 'Failed to fetch updates');
+      }
+      if (!anomaliesResponse.ok) {
+        throw new Error(anomaliesData.error || 'Failed to fetch anomalies');
+      }
+      setUpdates(updatesData.updates ?? []);
+      setAnomalies(anomaliesData.anomalies ?? []);
+    } catch (error) {
+      setErrorMessage(error.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadShipments();
+    loadAnalytics();
+  }, [loadShipments, loadAnalytics]);
+
+  useEffect(() => {
+    loadShipmentDetails(selectedShipmentId);
+  }, [selectedShipmentId, loadShipmentDetails]);
+
+  const riskData = analytics.riskData?.length > 0
+    ? analytics.riskData
+    : [
+      { name: 'Low', value: 0, color: '#10b981' },
+      { name: 'Medium', value: 0, color: '#f59e0b' },
+      { name: 'High', value: 0, color: '#ef4444' },
+    ];
+
+  const widgets = analytics.widgets || [];
+
+  const handleAddUpdate = async () => {
+    if (!selectedShipmentId) {
+      setErrorMessage('Create a shipment first to add updates.');
+      return;
+    }
     if (newUpdate.trim()) {
-      setUpdates([{ message: newUpdate, time: new Date().toLocaleTimeString(), type: 'manual' }, ...updates]);
-      setNewUpdate('');
+      try {
+        const response = await fetch(`/api/shipments/${selectedShipmentId}/updates`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: newUpdate, type: 'manual' }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to add update');
+        }
+        setUpdates((prev) => [data, ...prev]);
+        setNewUpdate('');
+        setErrorMessage('');
+      } catch (error) {
+        setErrorMessage(error.message);
+      }
+    }
+  };
+
+  const handleCreateShipment = async (event) => {
+    event.preventDefault();
+    try {
+      const response = await fetch('/api/shipments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(shipmentForm),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create shipment');
+      }
+      setShipmentForm({
+        source: '',
+        destination: '',
+        cargoType: 'Electronics',
+        priority: 'Standard',
+      });
+      setShipments((prev) => [data, ...prev]);
+      setSelectedShipmentId(data.id);
+      setErrorMessage('');
+      loadAnalytics();
+    } catch (error) {
+      setErrorMessage(error.message);
+    }
+  };
+
+  const handleSeedDemo = async (scenario = 'normal') => {
+    try {
+      const response = await fetch(`/api/demo/seed?scenario=${scenario}`, { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to seed demo data');
+      }
+      setStoryMode(data.scenario || scenario);
+      setSeedStatus(`Story mode "${data.scenario || scenario}" loaded (${data.count} shipments).`);
+      setErrorMessage('');
+      await loadShipments();
+      await loadAnalytics();
+    } catch (error) {
+      setSeedStatus('');
+      setErrorMessage(error.message);
     }
   };
 
@@ -96,18 +230,43 @@ export default function ShipperDashboard() {
             {/* Create/Manage Shipment */}
             <div className="bg-white rounded-lg shadow-md p-6">
               <h2 className="text-xl font-semibold mb-4 text-gray-900">Create New Shipment</h2>
-              <form className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="mb-4 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleSeedDemo('normal')}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 px-3 rounded-md"
+                >
+                  Normal Story
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSeedDemo('disruption')}
+                  className="bg-rose-600 hover:bg-rose-700 text-white text-sm font-medium py-2 px-3 rounded-md"
+                >
+                  Disruption Story
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSeedDemo('recovery')}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2 px-3 rounded-md"
+                >
+                  Recovery Story
+                </button>
+                {seedStatus ? <p className="text-sm text-green-700">{seedStatus}</p> : null}
+              </div>
+              <p className="mb-3 text-xs text-gray-500">Current story mode: {storyMode}</p>
+              <form onSubmit={handleCreateShipment} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Source</label>
-                  <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="New York, NY" />
+                  <input type="text" value={shipmentForm.source} onChange={(e) => setShipmentForm((prev) => ({ ...prev, source: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Enter source city" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Destination</label>
-                  <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Los Angeles, CA" />
+                  <input type="text" value={shipmentForm.destination} onChange={(e) => setShipmentForm((prev) => ({ ...prev, destination: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="Enter destination city" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Cargo Type</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-md">
+                  <select value={shipmentForm.cargoType} onChange={(e) => setShipmentForm((prev) => ({ ...prev, cargoType: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md">
                     <option>Electronics</option>
                     <option>Food</option>
                     <option>Chemicals</option>
@@ -116,7 +275,7 @@ export default function ShipperDashboard() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Priority Level</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-md">
+                  <select value={shipmentForm.priority} onChange={(e) => setShipmentForm((prev) => ({ ...prev, priority: e.target.value }))} className="w-full px-3 py-2 border border-gray-300 rounded-md">
                     <option>Standard</option>
                     <option>Express</option>
                     <option>Urgent</option>
@@ -162,19 +321,60 @@ export default function ShipperDashboard() {
             {/* Live Tracking */}
             <div className="bg-white rounded-lg shadow-md p-6">
               <h2 className="text-xl font-semibold mb-4 text-gray-900">Live Tracking - Multiple Shipments</h2>
-              <div className="bg-gray-100 rounded-lg h-64 flex items-center justify-center">
-                <p className="text-gray-600">Interactive map with multiple shipment routes and controls</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-gray-100 rounded-lg h-64 p-4 overflow-y-auto">
+                  {shipments.length === 0 ? (
+                    <p className="text-gray-600">No shipments yet. Create your first shipment above.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {shipments.map((shipment) => (
+                        <button
+                          key={shipment.id}
+                          type="button"
+                          onClick={() => setSelectedShipmentId(shipment.id)}
+                          className={`w-full text-left p-3 rounded-lg border ${selectedShipmentId === shipment.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'}`}
+                        >
+                          <p className="font-medium text-gray-900">{shipment.source} to {shipment.destination}</p>
+                          <p className="text-sm text-gray-600">Status: {shipment.status} | Risk: {shipment.riskScore}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="bg-gray-100 rounded-lg h-64 relative overflow-hidden">
+                  {(() => {
+                    const selectedShipment = shipments.find(s => s.id === selectedShipmentId);
+                    if (selectedShipment) {
+                      return <MapLoader source={selectedShipment.source} destination={selectedShipment.destination} />;
+                    }
+                    return <div className="w-full h-full flex items-center justify-center text-gray-500">Select a shipment to view map</div>;
+                  })()}
+                </div>
               </div>
             </div>
 
             {/* Operational Insights */}
             <div className="bg-white rounded-lg shadow-md p-6">
               <h2 className="text-xl font-semibold mb-4 text-gray-900">Operational Insights</h2>
+              <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="bg-blue-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-600">On-time Projection</p>
+                  <p className="text-xl font-bold text-blue-700">{analytics.metrics?.onTimeProjection ?? 0}%</p>
+                </div>
+                <div className="bg-amber-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-600">Avg Delay Prediction</p>
+                  <p className="text-xl font-bold text-amber-700">{analytics.metrics?.avgDelayPrediction ?? 0}%</p>
+                </div>
+                <div className="bg-emerald-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-600">Avg ETA</p>
+                  <p className="text-xl font-bold text-emerald-700">{analytics.metrics?.avgEtaHours ?? 0}h</p>
+                </div>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <h3 className="text-lg font-medium mb-2">Efficiency Score</h3>
-                  <div className="text-4xl font-bold text-green-600 mb-2">92%</div>
-                  <p className="text-sm text-gray-600">+5% from last month</p>
+                  <div className="text-4xl font-bold text-green-600 mb-2">{analytics.metrics?.onTimeProjection ?? 0}%</div>
+                  <p className="text-sm text-gray-600">Projected on-time deliveries</p>
                 </div>
                 <div>
                   <h3 className="text-lg font-medium mb-2">Cost vs Time Analysis</h3>
@@ -194,10 +394,23 @@ export default function ShipperDashboard() {
               <div className="mt-6">
                 <h3 className="text-lg font-medium mb-2">Route Optimization Suggestions</h3>
                 <ul className="space-y-2 text-sm">
-                  <li>• Consider multi-modal for long-distance routes</li>
-                  <li>• Air freight recommended for urgent electronics</li>
-                  <li>• Rail offers best cost-efficiency for bulk cargo</li>
+                  <li>• Average ETA forecast: {analytics.metrics?.avgEtaHours ?? 0} hours</li>
+                  <li>• Predicted delay risk index: {analytics.metrics?.avgDelayPrediction ?? 0}%</li>
+                  <li>• Prioritize lanes with High risk score in the tracking panel</li>
                 </ul>
+              </div>
+              <div className="mt-6">
+                <h3 className="text-lg font-medium mb-2">High-Risk Lanes (Top 5)</h3>
+                <div className="space-y-2">
+                  {(analytics.leaderboard || []).length === 0 ? (
+                    <p className="text-sm text-gray-600">No lanes available.</p>
+                  ) : (analytics.leaderboard || []).map((lane) => (
+                    <div key={lane.id} className="p-2 rounded bg-gray-50 flex items-center justify-between text-sm">
+                      <span>{lane.lane}</span>
+                      <span className="font-semibold text-red-600">{lane.predictedDelayPercent}%</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -207,6 +420,7 @@ export default function ShipperDashboard() {
             {/* Internal Updates Panel */}
             <div className="bg-white rounded-lg shadow-md p-6">
               <h2 className="text-xl font-semibold mb-4 text-gray-900">Internal Updates</h2>
+              {errorMessage ? <p className="text-sm text-red-600 mb-3">{errorMessage}</p> : null}
               <div className="mb-4">
                 <textarea
                   value={newUpdate}
@@ -223,8 +437,8 @@ export default function ShipperDashboard() {
                 </button>
               </div>
               <div className="space-y-2">
-                {updates.map((update, index) => (
-                  <div key={index} className="p-3 bg-gray-50 rounded-lg">
+                {updates.map((update) => (
+                  <div key={update.id ?? `${update.message}-${update.time}`} className="p-3 bg-gray-50 rounded-lg">
                     <p className="text-sm font-medium">{update.message}</p>
                     <p className="text-xs text-gray-600">{update.time}</p>
                   </div>
@@ -236,8 +450,8 @@ export default function ShipperDashboard() {
             <div className="bg-white rounded-lg shadow-md p-6">
               <h2 className="text-xl font-semibold mb-4 text-gray-900">Anomaly Detection</h2>
               <div className="space-y-3">
-                {anomalies.map((anomaly, index) => (
-                  <div key={index} className={`p-3 rounded-lg ${anomaly.severity === 'high' ? 'bg-red-50' : 'bg-yellow-50'}`}>
+                {anomalies.map((anomaly) => (
+                  <div key={anomaly.id ?? anomaly.message} className={`p-3 rounded-lg ${anomaly.severity === 'high' ? 'bg-red-50' : 'bg-yellow-50'}`}>
                     <div className="flex items-start">
                       <ExclamationIcon className={`w-5 h-5 mr-2 mt-0.5 ${anomaly.severity === 'high' ? 'text-red-600' : 'text-yellow-600'}`} />
                       <div>
@@ -268,7 +482,9 @@ export default function ShipperDashboard() {
                   ) : (
                     <>
                       <p className="text-2xl font-bold text-gray-900">{widget.value}</p>
-                      <p className={`text-sm ${widget.change.startsWith('+') ? 'text-green-600' : 'text-red-600'}`}>{widget.change}</p>
+                      {widget.change ? (
+                        <p className={`text-sm ${widget.change.startsWith('+') ? 'text-green-600' : 'text-red-600'}`}>{widget.change}</p>
+                      ) : null}
                     </>
                   )}
                 </div>

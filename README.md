@@ -31,6 +31,29 @@ npm run dev
 
 3. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
+## Backend Setup (Prisma + API Routes)
+
+1. Add a `.env` file in project root:
+```bash
+DATABASE_URL="file:./dev.db"
+```
+
+2. Generate the Prisma client and sync schema:
+```bash
+npx prisma generate
+npx prisma db push
+```
+
+3. Available API routes:
+- `GET /api/shipments` - list all shipments (with recent updates/anomalies)
+- `POST /api/shipments` - create shipment (`source`, `destination`, `cargoType`, `priority`)
+- `GET /api/shipments/:id` - fetch one shipment with full history
+- `PATCH /api/shipments/:id` - update shipment fields (`status`, `eta`, `riskScore`, etc.)
+- `DELETE /api/shipments/:id` - delete shipment
+- `GET /api/shipments/:id/updates` and `POST /api/shipments/:id/updates`
+- `GET /api/shipments/:id/anomalies` and `POST /api/shipments/:id/anomalies`
+- `GET /api/analytics` - dashboard metrics and risk distribution
+
 ## Project Structure
 
 ```

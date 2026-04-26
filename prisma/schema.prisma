@@ -1,0 +1,45 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Shipment {
+  id          String    @id @default(cuid())
+  status      String    @default("Pending")
+  eta         String?
+  riskScore   String    @default("Low")
+  source      String?
+  destination String?
+  cargoType   String?
+  priority    String    @default("Standard")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  updates     Update[]
+  anomalies   Anomaly[]
+}
+
+model Update {
+  id         String   @id @default(cuid())
+  message    String
+  time       String?
+  type       String
+  createdAt  DateTime @default(now())
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  shipmentId String
+}
+
+model Anomaly {
+  id         String   @id @default(cuid())
+  message    String
+  severity   String
+  createdAt  DateTime @default(now())
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  shipmentId String
+}
